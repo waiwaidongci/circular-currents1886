@@ -7,7 +7,7 @@ from sqlalchemy import text
 from src.config.database import Base,engine
 from src.config.queue import queue
 from src import models
-from src.routes import auth,surveys,moorings,bearings,runs,notes,audits
+from src.routes import auth,surveys,moorings,bearings,runs,joints,notes,audits
 from src.middlewares.request_guard import RequestGuard
 from src.middlewares.error_handler import ErrorHandler
 @asynccontextmanager
@@ -21,7 +21,7 @@ async def lifespan(app):
     yield
 app=FastAPI(title='霁岬浮标流向研究册',lifespan=lifespan)
 app.add_middleware(RequestGuard);app.add_middleware(ErrorHandler)
-for module in [auth,surveys,moorings,bearings,runs,notes,audits]:app.include_router(module.router)
+for module in [auth,surveys,moorings,bearings,runs,joints,notes,audits]:app.include_router(module.router)
 @app.get('/health')
 def health():
     with engine.connect() as db:db.execute(text('SELECT 1'))

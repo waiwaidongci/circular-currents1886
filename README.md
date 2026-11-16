@@ -36,7 +36,7 @@ docker compose exec -T backend python -m scripts.seed_demo
 
 ## 实体、页面与代码
 
-DirectionSurvey、Mooring、BearingReading、DirectionRun、ObservationNote分别贯穿model/schema/service/controller/route和前端API/store/页面。调查/浮标/采样code唯一；角度使用MySQL DOUBLE。每期每浮标最多250条，可新增调查、导入JSON角度、编辑调查备注；浮标说明仅admin可编辑。
+DirectionSurvey、Mooring、BearingReading、DirectionRun、JointRun、ObservationNote分别贯穿model/schema/service/controller/route和前端API/store/页面。调查/浮标/采样code唯一；角度使用MySQL DOUBLE。每期每浮标最多250条，可新增调查、浮标、导入JSON角度、编辑调查备注；浮标说明仅admin可编辑。
 
 六页：研究首页、浮标与采样、圆周研究、方向与差异、观察说明、研究留痕。PolarPlot在首页和结果页复用；RunSelect/PageHeading/StatusBadge/ErrorNotice共享；useTask/usePolling管理恢复与刷新。JWT角色、Redis按来源分钟配额、全局错误处理和审计组成横切模块。
 
@@ -62,6 +62,12 @@ R<1e−8时均值方向为空、单峰集中度MLE为0；1−R<1e−8时集中�
 
 每组2–250有限角度、99–999置换；同浮标不得同时引用。360、NaN、Inf、bool等非法角度返回422；空组保留明确failed任务。研究保存原始输入快照、配置、零分布和SHA256，新增采样不会改写旧结果。
 
+## 多浮标联合研究
+
+逐对比较后挑最小p会夸大差异：同一调查3–32座浮标可建立JointRun联合研究。每次统一重分全部采样标签并保留各组大小，全部浮标对共享同一次置换；沿用弦距离V统计量，C(k,2)对并列整批计算。校正用Westfall–Young逐步最大值（step-down maxT）：各对按观测统计量降序，逐秩取联合零分布的逐次最大值，p=(1+达到或超过次数)/(B+1)，并沿秩次强制单调；校正p不小于原始p。每次各对统计量随研究保存（`null_statistics`列，详情接口可取）供复算；结果页与获批CSV分列原始p与校正p。
+
+距离矩阵分块计算，置换批用矩阵乘整批求块和：32座×100条×999次重分在单进程约十余秒完成（`python -m scripts.bench_joint`可复核，上限30秒），峰值内存预估超过256MB的口径在提交时返回422、计算时形成明确failed任务。小样本与直接距离矩阵逐次核对见`backend/tests/test_joint_algorithm.py`。原双组研究的接口、结果结构与导出不变；观察说明新增可空joint_run_id，关联且仅关联一类研究。
+
 ## 技术与配置
 
 | 层 | 实现 |
@@ -82,6 +88,7 @@ SEED_DEMO=true自动seed，异常只记日志；脚本可独立执行。初始3�
 
 - 合成独立角度，不连接设备；真实连续观测的自相关未经处理不能直接套iid标签置换。
 - von Mises单峰描述，无均值/κ置信区间；R₂为描述阈值，少量观测尤其不稳。
-- energy比较分布，小p不代表效应大小或成因；重复研究未作跨研究多重校正，不自动行动。
+- energy比较分布，小p不代表效应大小或成因；联合研究只做族系内逐步最大值校正，不跨研究校正，不自动行动。
 - JSON输入已规范角度，不把未知角度归零；每组最多250条/999置换，未做生产压测。
+- 联合研究置换统计量经BLAS矩阵乘求和，不同线程配置可能有1e−12级浮点差异；随研究保存的逐次统计量为复算准绳。
 - 单worker无running恢复/事务outbox，中断需另建任务；metadata首建表，Google字体离线回退。
